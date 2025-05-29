@@ -23,7 +23,7 @@
     .submit-button { cursor: default; }
     .submit-button:not(:disabled) { background: #28a745; color: #fff; cursor: pointer; }
     .submit-button:disabled { background: #333; color: #666; }
-    .level-summaries { color: #fff; font-size: 14px; margin-top: 8px; }
+    .level-summaries { color: #fff; font-size: 14px; margin-top: 8px; text-align: center; min-height: 60px; }
     .score-container { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
     .score-label { color: #fff; }
     .score-box { position: relative; width: 60px; height: 40px; border: 2px solid #fff; color: #fff; font-size: 24px; text-align: center; line-height: 40px; }
@@ -75,105 +75,329 @@
     </div>
   </div>
   <script>
-    const audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-    const rowFrequencies=[392.00,349.23,329.63,293.66,261.63];
-    const rowColors=['#17b99a','#4caf50','#ffd600','#ff9800','#f44336'];
-    const grid=document.getElementById('grid');
-    const difficultySelect=document.getElementById('difficulty');
-    const playerToggle=document.getElementById('player-toggle');
-    const submitButton=document.getElementById('submit-button');
-    const playButton=document.querySelector('.play-button');
-    const retryButton=document.querySelector('.retry-button');
-    const indicators=document.querySelectorAll('.indicator');
-    const scoreSpan=document.getElementById('score');
-    const levelNumberSpan=document.getElementById('level-number');
-    const levelSummariesDiv=document.getElementById('level-summaries');
-    const winModal=document.getElementById('win-modal');
-    const winDetailsDiv=document.getElementById('win-details');
-    const closeModalBtn=document.getElementById('close-modal');
-    let melodies,answered,currentMelodyIndex,lastPlayedIndex,score,penalty,userSelection;
-    const bpm=60,beatMs=60000/bpm,melodyCount=3;
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const rowFrequencies = [392.00, 349.23, 329.63, 293.66, 261.63]; // G4, F4, E4, D4, C4
+    const rowColors = ['#17b99a', '#4caf50', '#ffd600', '#ff9800', '#f44336']; // Teal, Green, Yellow, Orange, Red
+    const grid = document.getElementById('grid');
+    const difficultySelect = document.getElementById('difficulty');
+    const playerToggle = document.getElementById('player-toggle');
+    const submitButton = document.getElementById('submit-button');
+    const playButton = document.querySelector('.play-button');
+    const retryButton = document.querySelector('.retry-button');
+    const indicators = document.querySelectorAll('.indicator');
+    const scoreSpan = document.getElementById('score');
+    const levelNumberSpan = document.getElementById('level-number');
+    const levelSummariesDiv = document.getElementById('level-summaries');
+    const winModal = document.getElementById('win-modal');
+    const winDetailsDiv = document.getElementById('win-details');
+    const closeModalBtn = document.getElementById('close-modal');
 
-    const levelScores=[0,0,0];
-    const levels=['Easy','Advanced','Master'];
+    let melodies, answered, currentMelodyIndex, lastPlayedIndex, score, penalty, userSelection;
+    const bpm = 60, beatMs = 60000 / bpm, melodyCount = 3;
 
-    function playNote(freq){const now=audioCtx.currentTime;const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();osc.type='triangle';osc.frequency.value=freq;gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(0.6,now+0.01);gain.gain.linearRampToValueAtTime(0,now+0.61);osc.connect(gain).connect(audioCtx.destination);osc.start(now);osc.stop(now+0.7);}
-    function getRowData(){if(difficultySelect.value==='Easy')return rowColors.slice(2);return rowColors;}
+    const levelScores = [0, 0, 0]; // Stores scores for Easy, Advanced, Master in game mode
+    const levels = ['Easy', 'Advanced', 'Master'];
+    let gameModeActive = true; // True if in progressive game mode, false for free play
 
-    function buildGrid(){grid.innerHTML='';const rows=getRowData().length;grid.style.gridTemplateRows=`repeat(${rows},1fr)`;for(let r=0;r<rows;r++)for(let c=0;c<5;c++){const btn=document.createElement('button');btn.className='grid-button';btn.dataset.row=r;btn.dataset.col=c;const color=getRowData()[r];const bright=c%2===0?'brightness(1.2)':'brightness(0.8)';btn.style.backgroundColor=color;btn.style.filter=bright;btn.dataset.baseColor=color;btn.dataset.filter=bright;btn.addEventListener('pointerdown',()=>{const isPlayer=playerToggle.classList.contains('active');playNote(rowFrequencies[difficultySelect.value==='Easy'?2+r:r]);if(!isPlayer){btn.style.backgroundColor='#fff';btn.style.filter='none';setTimeout(()=>{btn.style.backgroundColor=color;btn.style.filter=bright;},300);}else{const prev=userSelection[c];if(prev!==null){const old=grid.children[prev*5+c];old.textContent='';old.style.backgroundColor=old.dataset.baseColor;old.style.filter=old.dataset.filter;}userSelection[c]=r;btn.style.backgroundColor='#fff';btn.style.filter='none';if(userSelection.every(v=>v!==null))submitButton.disabled=false;}});grid.appendChild(btn);} }
-
-    function generateMelodies(){const rows=getRowData().length;melodies=Array.from({length:melodyCount},()=>Array.from({length:5},()=>Math.floor(Math.random()*rows)));}
-    function resetAnswered(){answered=Array(melodyCount).fill(false);}    
-
-    function resetAll(){
-      score=0;levelScores.fill(0);
-      difficultySelect.value='Easy';
-      resetLevel(true);
+    function playNote(freq) {
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.6, now + 0.01);
+      gain.gain.linearRampToValueAtTime(0, now + 0.61);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.7);
     }
-    function resetLevel(clearScore=false){
-      penalty=0;
-      if(clearScore){score=0;winDetailsDiv.innerHTML='';levelSummariesDiv.textContent='';}
-      scoreSpan.textContent=String(score).padStart(3,'0');
-      currentMelodyIndex=0;lastPlayedIndex=null;generateMelodies();resetAnswered();updateIndicators(-1);
-      playButton.disabled=false;retryButton.disabled=false;playerToggle.disabled=true;playerToggle.classList.remove('active');submitButton.disabled=true;
-      userSelection=Array(5).fill(null);
+
+    function getRowData() {
+      if (difficultySelect.value === 'Easy') return rowColors.slice(2); // Use bottom 3 rows for Easy (Yellow, Orange, Red)
+      return rowColors; // Use all 5 rows for Advanced and Master
+    }
+
+    function buildGrid() {
+      grid.innerHTML = '';
+      const currentRowsData = getRowData();
+      const rows = currentRowsData.length;
+      grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < 5; c++) {
+          const btn = document.createElement('button');
+          btn.className = 'grid-button';
+          btn.dataset.row = r;
+          btn.dataset.col = c;
+          const color = currentRowsData[r];
+          const bright = c % 2 === 0 ? 'brightness(1.2)' : 'brightness(0.8)';
+          btn.style.backgroundColor = color;
+          btn.style.filter = bright;
+          btn.dataset.baseColor = color;
+          btn.dataset.filter = bright;
+          btn.addEventListener('pointerdown', () => {
+            const isPlayer = playerToggle.classList.contains('active');
+            const freqIndex = difficultySelect.value === 'Easy' ? 2 + r : r;
+            playNote(rowFrequencies[freqIndex]);
+            if (!isPlayer) {
+              btn.style.backgroundColor = '#fff';
+              btn.style.filter = 'none';
+              setTimeout(() => {
+                btn.style.backgroundColor = color;
+                btn.style.filter = bright;
+              }, 300);
+            } else {
+              const prevSelectedRow = userSelection[c];
+              if (prevSelectedRow !== null) {
+                const oldBtn = grid.children[prevSelectedRow * 5 + c];
+                oldBtn.textContent = ''; // Clear any check/cross mark
+                oldBtn.style.backgroundColor = oldBtn.dataset.baseColor;
+                oldBtn.style.filter = oldBtn.dataset.filter;
+              }
+              userSelection[c] = r;
+              btn.style.backgroundColor = '#fff'; // Highlight selection
+              btn.style.filter = 'none';
+              if (userSelection.every(val => val !== null)) submitButton.disabled = false;
+            }
+          });
+          grid.appendChild(btn);
+        }
+      }
+    }
+
+    function generateMelodies() {
+      const rows = getRowData().length;
+      const currentDifficulty = difficultySelect.value;
+      melodies = Array.from({ length: melodyCount }, () => {
+        const singleMelody = [];
+        const noteCounts = Array(rows).fill(0); // Tracks counts for notes in the current melody
+
+        for (let i = 0; i < 5; i++) {
+          let randomRow;
+          if (currentDifficulty === 'Advanced' || currentDifficulty === 'Master') {
+            // Keep picking until a valid note is found (not used more than twice)
+            // Also ensure there are enough available notes if rows < 3 and we need 5 unique notes (not an issue here since rows >=3)
+            let attempts = 0; // safeguard against infinite loops if logic is flawed or rows too few.
+            do {
+              randomRow = Math.floor(Math.random() * rows);
+              attempts++;
+              if (attempts > 50) { // Highly unlikely to be needed with 3+ rows for 5 slots / max 2 rule
+                  console.warn("Max attempts reached in melody generation. Melody might not be perfectly diverse.");
+                  break; 
+              }
+            } while (noteCounts[randomRow] >= 2);
+            noteCounts[randomRow]++;
+            singleMelody.push(randomRow);
+          } else { // Easy level - no restriction
+            singleMelody.push(Math.floor(Math.random() * rows));
+          }
+        }
+        return singleMelody;
+      });
+    }
+    
+    function resetAnswered() {
+      answered = Array(melodyCount).fill(false);
+    }
+
+    function resetLevel() {
+      score = 0; // Current attempt score
+      penalty = 0;
+      scoreSpan.textContent = String(score).padStart(3, '0');
+      currentMelodyIndex = 0;
+      lastPlayedIndex = null;
+      generateMelodies(); // Generate melodies based on current difficulty
+      resetAnswered();
+      updateIndicators(-1);
+      playButton.disabled = false;
+      retryButton.disabled = false;
+      playerToggle.disabled = true;
+      playerToggle.classList.remove('active');
+      submitButton.disabled = true;
+      userSelection = Array(5).fill(null);
       buildGrid();
-      // update level number display
-      const lvlIdx=levels.indexOf(difficultySelect.value);
-      levelNumberSpan.textContent=String(lvlIdx+1);
-      winModal.style.display='none';
+      const lvlIdx = levels.indexOf(difficultySelect.value);
+      levelNumberSpan.textContent = String(lvlIdx + 1);
+      winModal.style.display = 'none';
+    }
+    
+    function resetAll() { // Starts a new game in Game Mode
+      gameModeActive = true;
+      levelScores.fill(0);
+      difficultySelect.value = 'Easy'; // Default to Easy
+      levelSummariesDiv.textContent = ''; // Clear game mode summaries
+      winDetailsDiv.innerHTML = '';     // Clear any win details from previous game
+      resetLevel(); // This will call generateMelodies for 'Easy'
     }
 
-    function updateIndicators(idx){indicators.forEach((el,i)=>el.classList.toggle('active',i===idx));}
+    function updateIndicators(idx) {
+      indicators.forEach((el, i) => el.classList.toggle('active', i === idx));
+    }
 
-    function playMelody(seq,cb){userSelection=Array(5).fill(null);submitButton.disabled=true;playerToggle.disabled=true;playerToggle.classList.remove('active');buildGrid();seq.forEach((r,i)=>{setTimeout(()=>{const b=grid.children[r*5+i];playNote(rowFrequencies[difficultySelect.value==='Easy'?2+r:r]);if(difficultySelect.value!=='Master'){b.style.backgroundColor='#fff';b.style.filter='none';setTimeout(()=>{if(!playerToggle.classList.contains('active')||userSelection[i]!==r){b.style.backgroundColor=b.dataset.baseColor;b.style.filter=b.dataset.filter;}},300);}if(i===seq.length-1&&cb)setTimeout(cb,300);},i*beatMs);});}
+    function playMelody(sequence, callback) {
+      userSelection = Array(5).fill(null);
+      submitButton.disabled = true;
+      playerToggle.disabled = true;
+      playerToggle.classList.remove('active');
+      buildGrid(); // Rebuild grid to clear any visual player selections
 
-    playButton.addEventListener('click',()=>{penalty=0;lastPlayedIndex=currentMelodyIndex;updateIndicators(lastPlayedIndex);playButton.disabled=true;retryButton.disabled=true;playMelody(melodies[currentMelodyIndex],()=>{playButton.disabled=false;retryButton.disabled=false;playerToggle.disabled=answered[lastPlayedIndex];currentMelodyIndex=(currentMelodyIndex+1)%melodyCount;});});
-    retryButton.addEventListener('click',()=>{if(lastPlayedIndex===null)return;penalty-=5;playButton.disabled=true;retryButton.disabled=true;playMelody(melodies[lastPlayedIndex],()=>{playButton.disabled=false;retryButton.disabled=false;playerToggle.disabled=answered[lastPlayedIndex];});});
+      sequence.forEach((rowIndex, colIndex) => {
+        setTimeout(() => {
+          const button = grid.children[rowIndex * 5 + colIndex];
+          const freqIndex = difficultySelect.value === 'Easy' ? 2 + rowIndex : rowIndex;
+          playNote(rowFrequencies[freqIndex]);
+          if (difficultySelect.value !== 'Master') { // Don't flash buttons on Master
+            button.style.backgroundColor = '#fff';
+            button.style.filter = 'none';
+            setTimeout(() => {
+              // Only revert if not player's turn or player hasn't selected this button
+              if (!playerToggle.classList.contains('active') || userSelection[colIndex] !== rowIndex) {
+                button.style.backgroundColor = button.dataset.baseColor;
+                button.style.filter = button.dataset.filter;
+              }
+            }, 300);
+          }
+          if (colIndex === sequence.length - 1 && callback) setTimeout(callback, 300);
+        }, colIndex * beatMs);
+      });
+    }
 
-    playerToggle.addEventListener('click',()=>{const a=playerToggle.classList.toggle('active');submitButton.disabled=!a;});
+    playButton.addEventListener('click', () => {
+      penalty = 0; // Reset penalty for new play, not for retry
+      lastPlayedIndex = currentMelodyIndex;
+      updateIndicators(lastPlayedIndex);
+      playButton.disabled = true;
+      retryButton.disabled = true;
+      playMelody(melodies[currentMelodyIndex], () => {
+        playButton.disabled = false;
+        retryButton.disabled = false;
+        playerToggle.disabled = answered[lastPlayedIndex]; // Enable if not yet answered
+        currentMelodyIndex = (currentMelodyIndex + 1) % melodyCount;
+      });
+    });
 
-    submitButton.addEventListener('click',()=>{if(lastPlayedIndex===null)return;const seq=melodies[lastPlayedIndex];let count=0;seq.forEach((r,i)=>{if(userSelection[i]===r)count++;});let points=count*10+penalty;answered[lastPlayedIndex]=true;levelScores[levels.indexOf(difficultySelect.value)] += points;seq.forEach((r,i)=>{const u=userSelection[i];const btn=grid.children[u*5+i];const mark=document.createElement('div');mark.textContent=u===r?'✔':'✖';mark.style.position='absolute';mark.style.top='50%';mark.style.left='50%';mark.style.transform='translate(-50%,-50%)';mark.style.fontSize='2rem';mark.style.color=u===r?'#0f0':'#f00';btn.appendChild(mark);});const box=document.querySelector('.score-box');const el=document.createElement('div');el.className='float-score';el.textContent=`${points>=0?'+':''}${points}`;box.appendChild(el);requestAnimationFrame(()=>{el.style.transform='translateX(-50%) translateY(-30px)';el.style.opacity='0';});setTimeout(()=>el.remove(),1000);score+=points;scoreSpan.textContent=String(score).padStart(3,'0');submitButton.disabled=true;playerToggle.classList.remove('active');playerToggle.disabled=answered[lastPlayedIndex];if(answered.every(a=>a)){
-      // build win details
-      const lvlIdx=levels.indexOf(difficultySelect.value);
-      let details='';
-      if(lvlIdx>0){ // show previous levels
-        details+= levels.slice(0,lvlIdx).map((lvl,i)=>`Lv. ${i+1}: ${levelScores[i]} points`).join('<br>') + '<br>';
-      }
-      details += `Lv. ${lvlIdx+1}: ${levelScores[lvlIdx]} points`;
-      if(lvlIdx===2 && levelScores[0]!=null){ // master final
-        const overall=levelScores.reduce((a,b)=>a+b,0);
-        details += `<br>Overall: ${overall} points`;
-        closeModalBtn.textContent='Try Again';
-      } else {
-        closeModalBtn.textContent='Advance Level';
-      }
-      winDetailsDiv.innerHTML=details;
-      winModal.style.display='flex';
-    }});
+    retryButton.addEventListener('click', () => {
+      if (lastPlayedIndex === null) return;
+      penalty -= 5; // Apply penalty for retry
+      playButton.disabled = true;
+      retryButton.disabled = true;
+      playMelody(melodies[lastPlayedIndex], () => {
+        playButton.disabled = false;
+        retryButton.disabled = false;
+        playerToggle.disabled = answered[lastPlayedIndex];
+      });
+    });
 
-    closeModalBtn.addEventListener('click', () => {
-      const lvl = levels.indexOf(difficultySelect.value);
-      if (lvl < 2) { // finishing level 1 or 2
-        // append summary under submit
-        levelSummariesDiv.innerHTML += `Lv. ${lvl+1}: ${levelScores[lvl]} points<br>`;
-        // advance to next level
-        difficultySelect.value = levels[lvl+1];
-        resetLevel(false);
-      } else { // finishing master level
-        const overall = levelScores.reduce((a, b) => a + b, 0);
-        levelSummariesDiv.innerHTML =
-          `Lv. 1: ${levelScores[0]} points<br>` +
-          `Lv. 2: ${levelScores[1]} points<br>` +
-          `Lv. 3: ${levelScores[2]} points<br>` +
-          `Overall: ${overall} points`;
-        closeModalBtn.textContent = 'Try Again';
-        resetLevel(false);
+    playerToggle.addEventListener('click', () => {
+      const isActive = playerToggle.classList.toggle('active');
+      submitButton.disabled = !isActive; // Enable submit if player mode is active
+      // Clear visual selection if toggling off
+      if (!isActive) {
+          buildGrid(); // This will clear selections
+          userSelection.fill(null);
       }
     });
 
-    difficultySelect.addEventListener('change',resetAll);
-    generateMelodies();resetAll();
+    submitButton.addEventListener('click', () => {
+      if (lastPlayedIndex === null) return;
+      const sequence = melodies[lastPlayedIndex];
+      let correctCount = 0;
+      sequence.forEach((r, i) => { if (userSelection[i] === r) correctCount++; });
+      
+      let points = correctCount * 10 + penalty;
+      answered[lastPlayedIndex] = true;
+      score += points; // Add to current attempt's score
+
+      sequence.forEach((r, i) => {
+        const selectedRow = userSelection[i];
+        if (selectedRow === null) return; // Skip if column not answered
+        const button = grid.children[selectedRow * 5 + i];
+        const mark = document.createElement('div');
+        mark.textContent = selectedRow === r ? '✔' : '✖';
+        mark.style.position = 'absolute';
+        mark.style.top = '50%';
+        mark.style.left = '50%';
+        mark.style.transform = 'translate(-50%, -50%)';
+        mark.style.fontSize = '2rem';
+        mark.style.color = selectedRow === r ? '#0f0' : '#f00';
+        button.appendChild(mark);
+      });
+
+      const scoreBox = document.querySelector('.score-box');
+      const floatScoreEl = document.createElement('div');
+      floatScoreEl.className = 'float-score';
+      floatScoreEl.textContent = `${points >= 0 ? '+' : ''}${points}`;
+      scoreBox.appendChild(floatScoreEl);
+      requestAnimationFrame(() => {
+        floatScoreEl.style.transform = 'translateX(-50%) translateY(-30px)';
+        floatScoreEl.style.opacity = '0';
+      });
+      setTimeout(() => floatScoreEl.remove(), 1000);
+      
+      scoreSpan.textContent = String(score).padStart(3, '0');
+      submitButton.disabled = true;
+      playerToggle.classList.remove('active');
+      playerToggle.disabled = true; // Disable after submitting one answer
+
+      if (answered.every(ans => ans)) { // All melodies for this level attempt are answered
+        const lvlIdx = levels.indexOf(difficultySelect.value);
+        let detailsHtml = '';
+
+        if (gameModeActive) {
+          levelScores[lvlIdx] = score; // Store final score for this level in game mode
+
+          for (let i = 0; i <= lvlIdx; i++) {
+            detailsHtml += `Lv. ${i + 1} (${levels[i]}): ${levelScores[i]} points<br>`;
+          }
+
+          if (lvlIdx === levels.length - 1) { // Master level in game mode completed
+            const overallScore = levelScores.reduce((sum, s) => sum + s, 0);
+            detailsHtml += `Overall: ${overallScore} points`;
+            closeModalBtn.textContent = 'Try Master Again';
+          } else { // Easy or Advanced in game mode completed
+            closeModalBtn.textContent = 'Advance Level';
+          }
+        } else { // Free Play Mode
+          detailsHtml = `Level ${levels[lvlIdx]} Complete!<br>Score: ${score} points`;
+          closeModalBtn.textContent = `Play ${levels[lvlIdx]} Again`;
+        }
+        winDetailsDiv.innerHTML = detailsHtml;
+        winModal.style.display = 'flex';
+      }
+    });
+
+    closeModalBtn.addEventListener('click', () => {
+      winModal.style.display = 'none';
+      const currentLevelIndex = levels.indexOf(difficultySelect.value);
+
+      if (gameModeActive) {
+        if (currentLevelIndex < levels.length - 1) { // Advancing from Easy or Advanced
+          levelSummariesDiv.innerHTML += `Lv. ${currentLevelIndex + 1} (${levels[currentLevelIndex]}): ${levelScores[currentLevelIndex]} points<br>`;
+          difficultySelect.value = levels[currentLevelIndex + 1]; // Programmatic change, does not fire 'change' event
+          resetLevel(); // Resets current attempt score for the new level
+        } else { // Finished Master in Game Mode (button says "Try Master Again")
+          const overall = levelScores.reduce((sum, s) => sum + s, 0);
+          levelSummariesDiv.innerHTML = // Show full game summary
+            `Lv. 1 (Easy): ${levelScores[0]} points<br>` +
+            `Lv. 2 (Advanced): ${levelScores[1]} points<br>` +
+            `Lv. 3 (Master): ${levelScores[2]} points<br>` +
+            `Overall: ${overall} points`;
+          resetLevel(); // Reload Master, resets current attempt score
+        }
+      } else { // Free Play Mode (button says "Play <Level> Again")
+        levelSummariesDiv.textContent = `Free Play Mode: ${levels[currentLevelIndex]} - Last score: ${score}`;
+        resetLevel(); // Reload current level for another free play, resets current attempt score
+      }
+    });
+
+    difficultySelect.addEventListener('change', () => {
+      gameModeActive = false; // User manually changed difficulty, enter free play
+      levelSummariesDiv.textContent = 'Free Play Mode';
+      winDetailsDiv.innerHTML = ''; // Clear any old win details
+      resetLevel(); // Reset for the newly selected difficulty (will call new generateMelodies)
+    });
+
+    // Initial setup
+    resetAll(); // Start in game mode
   </script>
 </body>
 </html>
