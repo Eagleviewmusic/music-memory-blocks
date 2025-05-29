@@ -14,10 +14,10 @@
     .indicator-container { display: flex; gap: 6px; margin-bottom: 12px; }
     .indicator { width: 12px; height: 12px; border-radius: 50%; background-color: #666; }
     .indicator.active { background-color: #ffd600; }
-    .circle-button { width: 50px; height: 50px; border: none; border-radius: 50%; background: #444; color: #fff; font-size: 24px; cursor: pointer; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; outline: none;}
+    .circle-button { width: 50px; height: 50px; border: none; border-radius: 50%; background: #444; color: #fff; font-size: 24px; cursor: pointer; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; }
     .circle-button:hover:not(:disabled), .circle-button:focus-visible { background: #555; }
     .circle-button:disabled { background: #333; cursor: default; }
-    .toggle-button, .submit-button { padding: 8px 16px; border: none; border-radius: 8px; background: #444; color: #fff; font-size: 16px; transition: background 0.2s; margin-bottom: 12px; outline: none;}
+    .toggle-button, .submit-button { padding: 8px 16px; border: none; border-radius: 8px; background: #444; color: #fff; font-size: 16px; transition: background 0.2s; margin-bottom: 12px; outline: none; }
     .toggle-button { cursor: default; }
     .toggle-button.active { background: #007bff; cursor: pointer; }
     .submit-button { cursor: default; }
@@ -138,24 +138,19 @@
       };
     }
     
-    // Updated addPointerTouchClickListener to prevent double firing
     function addPointerTouchClickListener(element, handler) {
-      // Use pointerdown for mouse, touch, and pen interactions
       element.addEventListener('pointerdown', function(e) {
-        // Optional: Check for main button if it's a mouse event (e.g., e.button === 0 for left button)
         if (e.pointerType === 'mouse' && e.button !== 0) {
-          return; // Ignore right/middle-clicks if desired
+          return; 
         }
         handler(e);
-        e.preventDefault(); // This is crucial to prevent further events like 'click'
-                            // or 'touchstart' from also triggering the handler for the same interaction.
+        e.preventDefault(); 
       });
 
-      // Keyboard accessibility
       element.addEventListener('keydown', function(e) {
         if (e.key === " " || e.key === "Enter") {
           handler(e);
-          e.preventDefault(); // Prevent default action for space/enter (e.g., scrolling/form submission)
+          e.preventDefault(); 
         }
       });
     }
@@ -370,24 +365,22 @@
       answered[lastPlayedIndex] = true;
       score += points;
 
-      if (difficultySelect.value !== 'Mozart Mode') {
-        sequence.forEach((r, i) => { 
-          const selectedRelativeRow = userSelection[i];
-          if (selectedRelativeRow === null) return; 
-          const button = grid.children[selectedRelativeRow * 5 + i];
-          if (button) { 
-            const mark = document.createElement('div');
-            mark.textContent = selectedRelativeRow === r ? '✔' : '✖';
-            mark.style.position = 'absolute';
-            mark.style.top = '50%';
-            mark.style.left = '50%';
-            mark.style.transform = 'translate(-50%, -50%)';
-            mark.style.fontSize = '2rem';
-            mark.style.color = selectedRelativeRow === r ? '#0f0' : '#f00';
-            button.appendChild(mark);
-          }
-        });
-      }
+      sequence.forEach((r, i) => { 
+        const selectedRelativeRow = userSelection[i];
+        if (selectedRelativeRow === null) return; 
+        const button = grid.children[selectedRelativeRow * 5 + i];
+        if (button) { 
+          const mark = document.createElement('div');
+          mark.textContent = selectedRelativeRow === r ? '✔' : '✖';
+          mark.style.position = 'absolute';
+          mark.style.top = '50%';
+          mark.style.left = '50%';
+          mark.style.transform = 'translate(-50%, -50%)';
+          mark.style.fontSize = '2rem';
+          mark.style.color = selectedRelativeRow === r ? '#0f0' : '#f00';
+          button.appendChild(mark);
+        }
+      });
 
       const scoreBox = document.querySelector('.score-box');
       const floatScoreEl = document.createElement('div');
