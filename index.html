@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Musical Memory Grid with Controls</title>
+  <style>
+    body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #222; }
+    .container { display: flex; align-items: center; }
+    .control-panel { display: flex; flex-direction: column; justify-content: space-between; align-items: center; margin-right: 20px; height: 80vmin; }
+    .controls { display: flex; flex-direction: column; align-items: center; }
+    .difficulty-container { margin-bottom: 12px; color: #fff; font-size: 14px; }
+    .difficulty-container select { margin-left: 8px; padding: 4px; }
+    .indicator-container { display: flex; gap: 6px; margin-bottom: 12px; }
+    .indicator { width: 12px; height: 12px; border-radius: 50%; background-color: #666; }
+    .indicator.active { background-color: #ffd600; }
+    .circle-button { width: 50px; height: 50px; border: none; border-radius: 50%; background: #444; color: #fff; font-size: 24px; cursor: pointer; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+    .circle-button:hover:not(:disabled) { background: #555; }
+    .circle-button:disabled { background: #333; cursor: default; }
+    .toggle-button, .submit-button { padding: 8px 16px; border: none; border-radius: 8px; background: #444; color: #fff; font-size: 16px; transition: background 0.2s; margin-bottom: 12px; }
+    .toggle-button { cursor: default; }
+    .toggle-button.active { background: #007bff; cursor: pointer; }
+    .submit-button { cursor: default; }
+    .submit-button:not(:disabled) { background: #28a745; color: #fff; cursor: pointer; }
+    .submit-button:disabled { background: #333; color: #666; }
+    .level-summaries { color: #fff; font-size: 14px; margin-top: 8px; }
+    .score-container { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+    .score-label { color: #fff; }
+    .score-box { position: relative; width: 60px; height: 40px; border: 2px solid #fff; color: #fff; font-size: 24px; text-align: center; line-height: 40px; }
+    #grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; width: 80vmin; height: 80vmin; }
+    .grid-button { position: relative; border: none; padding: 0; width: 100%; height: 100%; cursor: pointer; transition: background 0.2s, filter 0.2s; }
+    .float-score { position: absolute; bottom: 45px; left: 50%; transform: translateX(-50%); font-size: 18px; color: #0f0; opacity: 1; transition: transform 1s ease-out, opacity 1s ease-out; }
+    #win-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 1000; }
+    #win-modal .modal-content { background: #222; padding: 20px; border: 2px solid #ffd600; border-radius: 8px; color: #ffd600; text-align: center; font-family: sans-serif; max-width: 300px; }
+    #win-modal .modal-content h1 { margin-top: 0; font-size: 2.5rem; }
+    #win-modal .modal-content p { font-size: 1.2rem; }
+    #win-modal .modal-content button { margin-top: 16px; padding: 8px 16px; font-size: 1rem; border: none; border-radius: 4px; background: #ffd600; color: #000; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="control-panel">
+      <div class="controls">
+        <div class="difficulty-container">
+          Difficulty:
+          <select id="difficulty">
+            <option value="Easy" selected>Easy</option>
+            <option value="Advanced">Advanced</option>
+            <option value="Master">Master</option>
+          </select>
+        </div>
+        <div class="indicator-container">
+          <div class="indicator"></div>
+          <div class="indicator"></div>
+          <div class="indicator"></div>
+        </div>
+        <button class="circle-button play-button" title="Play">▶</button>
+        <button class="circle-button retry-button" title="Retry">↻</button>
+        <button class="toggle-button" id="player-toggle" disabled>Player</button>
+        <button class="submit-button" id="submit-button" disabled>Submit</button>
+        <div class="level-summaries" id="level-summaries"></div>
+      </div>
+      <div class="score-container">
+        <span class="score-label">Lv. <span id="level-number">1</span></span>
+        <div class="score-box"><span id="score">000</span></div>
+      </div>
+    </div>
+    <div id="grid"></div>
+  </div>
+  <div id="win-modal">
+    <div class="modal-content">
+      <h1>Congratulations!</h1>
+      <div id="win-details"></div>
+      <button id="close-modal">Advance Level</button>
+    </div>
+  </div>
+  <script>
+    const audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    const rowFrequencies=[392.00,349.23,329.63,293.66,261.63];
+    const rowColors=['#17b99a','#4caf50','#ffd600','#ff9800','#f44336'];
+    const grid=document.getElementById('grid');
+    const difficultySelect=document.getElementById('difficulty');
+    const playerToggle=document.getElementById('player-toggle');
+    const submitButton=document.getElementById('submit-button');
+    const playButton=document.querySelector('.play-button');
+    const retryButton=document.querySelector('.retry-button');
+    const indicators=document.querySelectorAll('.indicator');
+    const scoreSpan=document.getElementById('score');
+    const levelNumberSpan=document.getElementById('level-number');
+    const levelSummariesDiv=document.getElementById('level-summaries');
+    const winModal=document.getElementById('win-modal');
+    const winDetailsDiv=document.getElementById('win-details');
+    const closeModalBtn=document.getElementById('close-modal');
+    let melodies,answered,currentMelodyIndex,lastPlayedIndex,score,penalty,userSelection;
+    const bpm=60,beatMs=60000/bpm,melodyCount=3;
+
+    const levelScores=[0,0,0];
+    const levels=['Easy','Advanced','Master'];
+
+    function playNote(freq){const now=audioCtx.currentTime;const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();osc.type='triangle';osc.frequency.value=freq;gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(0.6,now+0.01);gain.gain.linearRampToValueAtTime(0,now+0.61);osc.connect(gain).connect(audioCtx.destination);osc.start(now);osc.stop(now+0.7);}
+    function getRowData(){if(difficultySelect.value==='Easy')return rowColors.slice(2);return rowColors;}
+
+    function buildGrid(){grid.innerHTML='';const rows=getRowData().length;grid.style.gridTemplateRows=`repeat(${rows},1fr)`;for(let r=0;r<rows;r++)for(let c=0;c<5;c++){const btn=document.createElement('button');btn.className='grid-button';btn.dataset.row=r;btn.dataset.col=c;const color=getRowData()[r];const bright=c%2===0?'brightness(1.2)':'brightness(0.8)';btn.style.backgroundColor=color;btn.style.filter=bright;btn.dataset.baseColor=color;btn.dataset.filter=bright;btn.addEventListener('pointerdown',()=>{const isPlayer=playerToggle.classList.contains('active');playNote(rowFrequencies[difficultySelect.value==='Easy'?2+r:r]);if(!isPlayer){btn.style.backgroundColor='#fff';btn.style.filter='none';setTimeout(()=>{btn.style.backgroundColor=color;btn.style.filter=bright;},300);}else{const prev=userSelection[c];if(prev!==null){const old=grid.children[prev*5+c];old.textContent='';old.style.backgroundColor=old.dataset.baseColor;old.style.filter=old.dataset.filter;}userSelection[c]=r;btn.style.backgroundColor='#fff';btn.style.filter='none';if(userSelection.every(v=>v!==null))submitButton.disabled=false;}});grid.appendChild(btn);} }
+
+    function generateMelodies(){const rows=getRowData().length;melodies=Array.from({length:melodyCount},()=>Array.from({length:5},()=>Math.floor(Math.random()*rows)));}
+    function resetAnswered(){answered=Array(melodyCount).fill(false);}    
+
+    function resetAll(){
+      score=0;levelScores.fill(0);
+      difficultySelect.value='Easy';
+      resetLevel(true);
+    }
+    function resetLevel(clearScore=false){
+      penalty=0;
+      if(clearScore){score=0;winDetailsDiv.innerHTML='';levelSummariesDiv.textContent='';}
+      scoreSpan.textContent=String(score).padStart(3,'0');
+      currentMelodyIndex=0;lastPlayedIndex=null;generateMelodies();resetAnswered();updateIndicators(-1);
+      playButton.disabled=false;retryButton.disabled=false;playerToggle.disabled=true;playerToggle.classList.remove('active');submitButton.disabled=true;
+      userSelection=Array(5).fill(null);
+      buildGrid();
+      // update level number display
+      const lvlIdx=levels.indexOf(difficultySelect.value);
+      levelNumberSpan.textContent=String(lvlIdx+1);
+      winModal.style.display='none';
+    }
+
+    function updateIndicators(idx){indicators.forEach((el,i)=>el.classList.toggle('active',i===idx));}
+
+    function playMelody(seq,cb){userSelection=Array(5).fill(null);submitButton.disabled=true;playerToggle.disabled=true;playerToggle.classList.remove('active');buildGrid();seq.forEach((r,i)=>{setTimeout(()=>{const b=grid.children[r*5+i];playNote(rowFrequencies[difficultySelect.value==='Easy'?2+r:r]);if(difficultySelect.value!=='Master'){b.style.backgroundColor='#fff';b.style.filter='none';setTimeout(()=>{if(!playerToggle.classList.contains('active')||userSelection[i]!==r){b.style.backgroundColor=b.dataset.baseColor;b.style.filter=b.dataset.filter;}},300);}if(i===seq.length-1&&cb)setTimeout(cb,300);},i*beatMs);});}
+
+    playButton.addEventListener('click',()=>{penalty=0;lastPlayedIndex=currentMelodyIndex;updateIndicators(lastPlayedIndex);playButton.disabled=true;retryButton.disabled=true;playMelody(melodies[currentMelodyIndex],()=>{playButton.disabled=false;retryButton.disabled=false;playerToggle.disabled=answered[lastPlayedIndex];currentMelodyIndex=(currentMelodyIndex+1)%melodyCount;});});
+    retryButton.addEventListener('click',()=>{if(lastPlayedIndex===null)return;penalty-=5;playButton.disabled=true;retryButton.disabled=true;playMelody(melodies[lastPlayedIndex],()=>{playButton.disabled=false;retryButton.disabled=false;playerToggle.disabled=answered[lastPlayedIndex];});});
+
+    playerToggle.addEventListener('click',()=>{const a=playerToggle.classList.toggle('active');submitButton.disabled=!a;});
+
+    submitButton.addEventListener('click',()=>{if(lastPlayedIndex===null)return;const seq=melodies[lastPlayedIndex];let count=0;seq.forEach((r,i)=>{if(userSelection[i]===r)count++;});let points=count*10+penalty;answered[lastPlayedIndex]=true;levelScores[levels.indexOf(difficultySelect.value)] += points;seq.forEach((r,i)=>{const u=userSelection[i];const btn=grid.children[u*5+i];const mark=document.createElement('div');mark.textContent=u===r?'✔':'✖';mark.style.position='absolute';mark.style.top='50%';mark.style.left='50%';mark.style.transform='translate(-50%,-50%)';mark.style.fontSize='2rem';mark.style.color=u===r?'#0f0':'#f00';btn.appendChild(mark);});const box=document.querySelector('.score-box');const el=document.createElement('div');el.className='float-score';el.textContent=`${points>=0?'+':''}${points}`;box.appendChild(el);requestAnimationFrame(()=>{el.style.transform='translateX(-50%) translateY(-30px)';el.style.opacity='0';});setTimeout(()=>el.remove(),1000);score+=points;scoreSpan.textContent=String(score).padStart(3,'0');submitButton.disabled=true;playerToggle.classList.remove('active');playerToggle.disabled=answered[lastPlayedIndex];if(answered.every(a=>a)){
+      // build win details
+      const lvlIdx=levels.indexOf(difficultySelect.value);
+      let details='';
+      if(lvlIdx>0){ // show previous levels
+        details+= levels.slice(0,lvlIdx).map((lvl,i)=>`Lv. ${i+1}: ${levelScores[i]} points`).join('<br>') + '<br>';
+      }
+      details += `Lv. ${lvlIdx+1}: ${levelScores[lvlIdx]} points`;
+      if(lvlIdx===2 && levelScores[0]!=null){ // master final
+        const overall=levelScores.reduce((a,b)=>a+b,0);
+        details += `<br>Overall: ${overall} points`;
+        closeModalBtn.textContent='Try Again';
+      } else {
+        closeModalBtn.textContent='Advance Level';
+      }
+      winDetailsDiv.innerHTML=details;
+      winModal.style.display='flex';
+    }});
+
+    closeModalBtn.addEventListener('click', () => {
+      const lvl = levels.indexOf(difficultySelect.value);
+      if (lvl < 2) { // finishing level 1 or 2
+        // append summary under submit
+        levelSummariesDiv.innerHTML += `Lv. ${lvl+1}: ${levelScores[lvl]} points<br>`;
+        // advance to next level
+        difficultySelect.value = levels[lvl+1];
+        resetLevel(false);
+      } else { // finishing master level
+        const overall = levelScores.reduce((a, b) => a + b, 0);
+        levelSummariesDiv.innerHTML =
+          `Lv. 1: ${levelScores[0]} points<br>` +
+          `Lv. 2: ${levelScores[1]} points<br>` +
+          `Lv. 3: ${levelScores[2]} points<br>` +
+          `Overall: ${overall} points`;
+        closeModalBtn.textContent = 'Try Again';
+        resetLevel(false);
+      }
+    });
+
+    difficultySelect.addEventListener('change',resetAll);
+    generateMelodies();resetAll();
+  </script>
+</body>
+</html>
