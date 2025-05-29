@@ -14,10 +14,10 @@
     .indicator-container { display: flex; gap: 6px; margin-bottom: 12px; }
     .indicator { width: 12px; height: 12px; border-radius: 50%; background-color: #666; }
     .indicator.active { background-color: #ffd600; }
-    .circle-button { width: 50px; height: 50px; border: none; border-radius: 50%; background: #444; color: #fff; font-size: 24px; cursor: pointer; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
-    .circle-button:hover:not(:disabled) { background: #555; }
+    .circle-button { width: 50px; height: 50px; border: none; border-radius: 50%; background: #444; color: #fff; font-size: 24px; cursor: pointer; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; outline: none;}
+    .circle-button:hover:not(:disabled), .circle-button:focus-visible { background: #555; }
     .circle-button:disabled { background: #333; cursor: default; }
-    .toggle-button, .submit-button { padding: 8px 16px; border: none; border-radius: 8px; background: #444; color: #fff; font-size: 16px; transition: background 0.2s; margin-bottom: 12px; }
+    .toggle-button, .submit-button { padding: 8px 16px; border: none; border-radius: 8px; background: #444; color: #fff; font-size: 16px; transition: background 0.2s; margin-bottom: 12px; outline: none;}
     .toggle-button { cursor: default; }
     .toggle-button.active { background: #007bff; cursor: pointer; }
     .submit-button { cursor: default; }
@@ -28,7 +28,8 @@
     .score-label { color: #fff; }
     .score-box { position: relative; width: 60px; height: 40px; border: 2px solid #fff; color: #fff; font-size: 24px; text-align: center; line-height: 40px; }
     #grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; width: 80vmin; height: 80vmin; }
-    .grid-button { position: relative; border: none; padding: 0; width: 100%; height: 100%; cursor: pointer; transition: background 0.2s, filter 0.2s; }
+    .grid-button { position: relative; border: none; padding: 0; width: 100%; height: 100%; cursor: pointer; transition: background 0.2s, filter 0.2s; outline: none;}
+    .grid-button:focus-visible { box-shadow: 0 0 0 3px #ffd600; }
     .float-score { position: absolute; bottom: 45px; left: 50%; transform: translateX(-50%); font-size: 18px; color: #0f0; opacity: 1; transition: transform 1s ease-out, opacity 1s ease-out; }
     #win-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 1000; }
     #win-modal .modal-content { background: #222; padding: 20px; border: 2px solid #ffd600; border-radius: 8px; color: #ffd600; text-align: center; font-family: sans-serif; max-width: 300px; }
@@ -43,21 +44,23 @@
       <div class="controls">
         <div class="difficulty-container">
           Difficulty:
-          <select id="difficulty">
-            <option value="Easy" selected>Easy</option>
-            <option value="Advanced">Advanced</option>
-            <option value="Master">Master</option>
+          <select id="difficulty" aria-label="Select difficulty">
+            <option value="Easy" selected>Easy (Lv.1)</option>
+            <option value="Advanced">Advanced (Lv.2)</option>
+            <option value="Master">Master (Lv.3)</option>
+            <option value="Walby Mode">Walby Mode (Lv.4)</option>
+            <option value="Mozart Mode">Mozart Mode (Lv.5)</option>
           </select>
         </div>
-        <div class="indicator-container">
+        <div class="indicator-container" aria-hidden="true">
           <div class="indicator"></div>
           <div class="indicator"></div>
           <div class="indicator"></div>
         </div>
-        <button class="circle-button play-button" title="Play">▶</button>
-        <button class="circle-button retry-button" title="Retry">↻</button>
-        <button class="toggle-button" id="player-toggle" disabled>Player</button>
-        <button class="submit-button" id="submit-button" disabled>Submit</button>
+        <button class="circle-button play-button" title="Play" aria-label="Play">▶</button>
+        <button class="circle-button retry-button" title="Retry" aria-label="Retry">↻</button>
+        <button class="toggle-button" id="player-toggle" disabled aria-label="Player">Player</button>
+        <button class="submit-button" id="submit-button" disabled aria-label="Submit">Submit</button>
         <div class="level-summaries" id="level-summaries"></div>
       </div>
       <div class="score-container">
@@ -67,7 +70,7 @@
     </div>
     <div id="grid"></div>
   </div>
-  <div id="win-modal">
+  <div id="win-modal" role="dialog" aria-modal="true" aria-labelledby="win-details">
     <div class="modal-content">
       <h1>Congratulations!</h1>
       <div id="win-details"></div>
@@ -76,8 +79,9 @@
   </div>
   <script>
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const rowFrequencies = [392.00, 349.23, 329.63, 293.66, 261.63]; // G4, F4, E4, D4, C4
-    const rowColors = ['#17b99a', '#4caf50', '#ffd600', '#ff9800', '#f44336']; // Teal, Green, Yellow, Orange, Red
+    const allRowFrequencies = [523.25, 493.88, 440.00, 392.00, 349.23, 329.63, 293.66, 261.63];
+    const allRowColors = ['#ff0000', '#c71585', '#0000ff', '#17b99a', '#4caf50', '#ffd600', '#ff9800', '#f44336'];
+
     const grid = document.getElementById('grid');
     const difficultySelect = document.getElementById('difficulty');
     const playerToggle = document.getElementById('player-toggle');
@@ -95,9 +99,9 @@
     let melodies, answered, currentMelodyIndex, lastPlayedIndex, score, penalty, userSelection;
     const bpm = 60, beatMs = 60000 / bpm, melodyCount = 3;
 
-    const levelScores = [0, 0, 0]; // Stores scores for Easy, Advanced, Master in game mode
-    const levels = ['Easy', 'Advanced', 'Master'];
-    let gameModeActive = true; // True if in progressive game mode, false for free play
+    const levels = ['Easy', 'Advanced', 'Master', 'Walby Mode', 'Mozart Mode'];
+    let levelScores = [0, 0, 0, 0, 0]; 
+    let gameModeActive = true; 
 
     function playNote(freq) {
       const now = audioCtx.currentTime;
@@ -112,50 +116,98 @@
       osc.stop(now + 0.7);
     }
 
-    function getRowData() {
-      if (difficultySelect.value === 'Easy') return rowColors.slice(2); // Use bottom 3 rows for Easy (Yellow, Orange, Red)
-      return rowColors; // Use all 5 rows for Advanced and Master
+    function getCurrentGridData() {
+      const currentDifficulty = difficultySelect.value;
+      if (currentDifficulty === 'Easy') {
+        return {
+            colors: allRowColors.slice(5), 
+            frequencies: allRowFrequencies.slice(5),
+            freqStartIndex: 5 
+        };
+      } else if (currentDifficulty === 'Advanced' || currentDifficulty === 'Master') {
+         return {
+            colors: allRowColors.slice(3), 
+            frequencies: allRowFrequencies.slice(3),
+            freqStartIndex: 3 
+        };
+      }
+      return {
+          colors: allRowColors,
+          frequencies: allRowFrequencies,
+          freqStartIndex: 0
+      };
+    }
+    
+    // Updated addPointerTouchClickListener to prevent double firing
+    function addPointerTouchClickListener(element, handler) {
+      // Use pointerdown for mouse, touch, and pen interactions
+      element.addEventListener('pointerdown', function(e) {
+        // Optional: Check for main button if it's a mouse event (e.g., e.button === 0 for left button)
+        if (e.pointerType === 'mouse' && e.button !== 0) {
+          return; // Ignore right/middle-clicks if desired
+        }
+        handler(e);
+        e.preventDefault(); // This is crucial to prevent further events like 'click'
+                            // or 'touchstart' from also triggering the handler for the same interaction.
+      });
+
+      // Keyboard accessibility
+      element.addEventListener('keydown', function(e) {
+        if (e.key === " " || e.key === "Enter") {
+          handler(e);
+          e.preventDefault(); // Prevent default action for space/enter (e.g., scrolling/form submission)
+        }
+      });
     }
 
     function buildGrid() {
       grid.innerHTML = '';
-      const currentRowsData = getRowData();
-      const rows = currentRowsData.length;
+      const { colors: currentColors, freqStartIndex } = getCurrentGridData();
+      const rows = currentColors.length;
       grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < 5; c++) {
           const btn = document.createElement('button');
           btn.className = 'grid-button';
-          btn.dataset.row = r;
+          btn.setAttribute('aria-label', `Grid button row ${r+1}, column ${c+1}`);
+          btn.setAttribute('tabindex', '0');
+          btn.dataset.row = r; 
           btn.dataset.col = c;
-          const color = currentRowsData[r];
+          const color = currentColors[r];
           const bright = c % 2 === 0 ? 'brightness(1.2)' : 'brightness(0.8)';
           btn.style.backgroundColor = color;
           btn.style.filter = bright;
           btn.dataset.baseColor = color;
           btn.dataset.filter = bright;
-          btn.addEventListener('pointerdown', () => {
+
+          addPointerTouchClickListener(btn, () => {
             const isPlayer = playerToggle.classList.contains('active');
-            const freqIndex = difficultySelect.value === 'Easy' ? 2 + r : r;
-            playNote(rowFrequencies[freqIndex]);
-            if (!isPlayer) {
-              btn.style.backgroundColor = '#fff';
-              btn.style.filter = 'none';
-              setTimeout(() => {
-                btn.style.backgroundColor = color;
-                btn.style.filter = bright;
-              }, 300);
-            } else {
+            playNote(allRowFrequencies[freqStartIndex + r]);
+            
+            if (!isPlayer) { 
+              if (difficultySelect.value !== 'Master' && difficultySelect.value !== 'Mozart Mode') {
+                  btn.style.backgroundColor = '#fff';
+                  btn.style.filter = 'none';
+                  setTimeout(() => {
+                    btn.style.backgroundColor = color;
+                    btn.style.filter = bright;
+                  }, 300);
+              }
+            } else if (isPlayer) { 
               const prevSelectedRow = userSelection[c];
               if (prevSelectedRow !== null) {
                 const oldBtn = grid.children[prevSelectedRow * 5 + c];
-                oldBtn.textContent = ''; // Clear any check/cross mark
-                oldBtn.style.backgroundColor = oldBtn.dataset.baseColor;
-                oldBtn.style.filter = oldBtn.dataset.filter;
+                if (oldBtn) { 
+                    oldBtn.textContent = ''; 
+                    oldBtn.style.backgroundColor = oldBtn.dataset.baseColor;
+                    oldBtn.style.filter = oldBtn.dataset.filter;
+                }
               }
-              userSelection[c] = r;
-              btn.style.backgroundColor = '#fff'; // Highlight selection
+              userSelection[c] = r; 
+              btn.style.backgroundColor = '#fff'; 
               btn.style.filter = 'none';
+              
               if (userSelection.every(val => val !== null)) submitButton.disabled = false;
             }
           });
@@ -165,30 +217,30 @@
     }
 
     function generateMelodies() {
-      const rows = getRowData().length;
+      const { colors: currentColors } = getCurrentGridData(); 
+      const rows = currentColors.length;
       const currentDifficulty = difficultySelect.value;
+
       melodies = Array.from({ length: melodyCount }, () => {
         const singleMelody = [];
-        const noteCounts = Array(rows).fill(0); // Tracks counts for notes in the current melody
+        const noteCounts = Array(rows).fill(0);
 
         for (let i = 0; i < 5; i++) {
           let randomRow;
-          if (currentDifficulty === 'Advanced' || currentDifficulty === 'Master') {
-            // Keep picking until a valid note is found (not used more than twice)
-            // Also ensure there are enough available notes if rows < 3 and we need 5 unique notes (not an issue here since rows >=3)
-            let attempts = 0; // safeguard against infinite loops if logic is flawed or rows too few.
+          if (currentDifficulty !== 'Easy') {
+            let attempts = 0;
             do {
               randomRow = Math.floor(Math.random() * rows);
               attempts++;
-              if (attempts > 50) { // Highly unlikely to be needed with 3+ rows for 5 slots / max 2 rule
-                  console.warn("Max attempts reached in melody generation. Melody might not be perfectly diverse.");
+              if (attempts > 50) {
+                  console.warn("Max attempts in melody gen. Diversity might be affected.");
                   break; 
               }
-            } while (noteCounts[randomRow] >= 2);
+            } while (noteCounts[randomRow] >= 2 && rows > 2); 
             noteCounts[randomRow]++;
-            singleMelody.push(randomRow);
-          } else { // Easy level - no restriction
-            singleMelody.push(Math.floor(Math.random() * rows));
+            singleMelody.push(randomRow); 
+          } else { 
+            singleMelody.push(Math.floor(Math.random() * rows)); 
           }
         }
         return singleMelody;
@@ -200,13 +252,12 @@
     }
 
     function resetLevel() {
-      score = 0; // Current attempt score
+      score = 0;
       penalty = 0;
       scoreSpan.textContent = String(score).padStart(3, '0');
       currentMelodyIndex = 0;
       lastPlayedIndex = null;
-      generateMelodies(); // Generate melodies based on current difficulty
-      resetAnswered();
+      
       updateIndicators(-1);
       playButton.disabled = false;
       retryButton.disabled = false;
@@ -214,19 +265,23 @@
       playerToggle.classList.remove('active');
       submitButton.disabled = true;
       userSelection = Array(5).fill(null);
-      buildGrid();
+      
+      buildGrid(); 
+      generateMelodies(); 
+      resetAnswered();
+
       const lvlIdx = levels.indexOf(difficultySelect.value);
       levelNumberSpan.textContent = String(lvlIdx + 1);
       winModal.style.display = 'none';
     }
     
-    function resetAll() { // Starts a new game in Game Mode
+    function resetAll() { 
       gameModeActive = true;
       levelScores.fill(0);
-      difficultySelect.value = 'Easy'; // Default to Easy
-      levelSummariesDiv.textContent = ''; // Clear game mode summaries
-      winDetailsDiv.innerHTML = '';     // Clear any win details from previous game
-      resetLevel(); // This will call generateMelodies for 'Easy'
+      difficultySelect.value = 'Easy'; 
+      levelSummariesDiv.textContent = ''; 
+      winDetailsDiv.innerHTML = '';    
+      resetLevel(); 
     }
 
     function updateIndicators(idx) {
@@ -238,23 +293,28 @@
       submitButton.disabled = true;
       playerToggle.disabled = true;
       playerToggle.classList.remove('active');
-      buildGrid(); // Rebuild grid to clear any visual player selections
+      buildGrid(); 
 
-      sequence.forEach((rowIndex, colIndex) => {
+      const { freqStartIndex } = getCurrentGridData();
+
+      sequence.forEach((relativeRowIndex, colIndex) => {
         setTimeout(() => {
-          const button = grid.children[rowIndex * 5 + colIndex];
-          const freqIndex = difficultySelect.value === 'Easy' ? 2 + rowIndex : rowIndex;
-          playNote(rowFrequencies[freqIndex]);
-          if (difficultySelect.value !== 'Master') { // Don't flash buttons on Master
-            button.style.backgroundColor = '#fff';
-            button.style.filter = 'none';
-            setTimeout(() => {
-              // Only revert if not player's turn or player hasn't selected this button
-              if (!playerToggle.classList.contains('active') || userSelection[colIndex] !== rowIndex) {
-                button.style.backgroundColor = button.dataset.baseColor;
-                button.style.filter = button.dataset.filter;
-              }
-            }, 300);
+          const button = grid.children[relativeRowIndex * 5 + colIndex];
+          playNote(allRowFrequencies[freqStartIndex + relativeRowIndex]);
+
+          if (difficultySelect.value !== 'Master' && difficultySelect.value !== 'Mozart Mode') {
+            if (button) { 
+                button.style.backgroundColor = '#fff';
+                button.style.filter = 'none';
+                setTimeout(() => {
+                  if (!playerToggle.classList.contains('active') || userSelection[colIndex] !== relativeRowIndex) {
+                    if (button) { 
+                        button.style.backgroundColor = button.dataset.baseColor;
+                        button.style.filter = button.dataset.filter;
+                    }
+                  }
+                }, 300);
+            }
           }
           if (colIndex === sequence.length - 1 && callback) setTimeout(callback, 300);
         }, colIndex * beatMs);
@@ -262,7 +322,7 @@
     }
 
     playButton.addEventListener('click', () => {
-      penalty = 0; // Reset penalty for new play, not for retry
+      penalty = 0; 
       lastPlayedIndex = currentMelodyIndex;
       updateIndicators(lastPlayedIndex);
       playButton.disabled = true;
@@ -270,14 +330,14 @@
       playMelody(melodies[currentMelodyIndex], () => {
         playButton.disabled = false;
         retryButton.disabled = false;
-        playerToggle.disabled = answered[lastPlayedIndex]; // Enable if not yet answered
+        playerToggle.disabled = answered[lastPlayedIndex]; 
         currentMelodyIndex = (currentMelodyIndex + 1) % melodyCount;
       });
     });
 
     retryButton.addEventListener('click', () => {
       if (lastPlayedIndex === null) return;
-      penalty -= 5; // Apply penalty for retry
+      penalty -= 5; 
       playButton.disabled = true;
       retryButton.disabled = true;
       playMelody(melodies[lastPlayedIndex], () => {
@@ -289,38 +349,45 @@
 
     playerToggle.addEventListener('click', () => {
       const isActive = playerToggle.classList.toggle('active');
-      submitButton.disabled = !isActive; // Enable submit if player mode is active
-      // Clear visual selection if toggling off
+      submitButton.disabled = !isActive || userSelection.some(val => val === null);
       if (!isActive) {
-          buildGrid(); // This will clear selections
+          buildGrid(); 
           userSelection.fill(null);
+      } else {
+          if (userSelection.every(val => val === null)) {
+              submitButton.disabled = true;
+          }
       }
     });
 
     submitButton.addEventListener('click', () => {
       if (lastPlayedIndex === null) return;
-      const sequence = melodies[lastPlayedIndex];
+      const sequence = melodies[lastPlayedIndex]; 
       let correctCount = 0;
       sequence.forEach((r, i) => { if (userSelection[i] === r) correctCount++; });
       
       let points = correctCount * 10 + penalty;
       answered[lastPlayedIndex] = true;
-      score += points; // Add to current attempt's score
+      score += points;
 
-      sequence.forEach((r, i) => {
-        const selectedRow = userSelection[i];
-        if (selectedRow === null) return; // Skip if column not answered
-        const button = grid.children[selectedRow * 5 + i];
-        const mark = document.createElement('div');
-        mark.textContent = selectedRow === r ? '✔' : '✖';
-        mark.style.position = 'absolute';
-        mark.style.top = '50%';
-        mark.style.left = '50%';
-        mark.style.transform = 'translate(-50%, -50%)';
-        mark.style.fontSize = '2rem';
-        mark.style.color = selectedRow === r ? '#0f0' : '#f00';
-        button.appendChild(mark);
-      });
+      if (difficultySelect.value !== 'Mozart Mode') {
+        sequence.forEach((r, i) => { 
+          const selectedRelativeRow = userSelection[i];
+          if (selectedRelativeRow === null) return; 
+          const button = grid.children[selectedRelativeRow * 5 + i];
+          if (button) { 
+            const mark = document.createElement('div');
+            mark.textContent = selectedRelativeRow === r ? '✔' : '✖';
+            mark.style.position = 'absolute';
+            mark.style.top = '50%';
+            mark.style.left = '50%';
+            mark.style.transform = 'translate(-50%, -50%)';
+            mark.style.fontSize = '2rem';
+            mark.style.color = selectedRelativeRow === r ? '#0f0' : '#f00';
+            button.appendChild(mark);
+          }
+        });
+      }
 
       const scoreBox = document.querySelector('.score-box');
       const floatScoreEl = document.createElement('div');
@@ -336,27 +403,27 @@
       scoreSpan.textContent = String(score).padStart(3, '0');
       submitButton.disabled = true;
       playerToggle.classList.remove('active');
-      playerToggle.disabled = true; // Disable after submitting one answer
+      playerToggle.disabled = true;
 
-      if (answered.every(ans => ans)) { // All melodies for this level attempt are answered
+      if (answered.every(ans => ans)) {
         const lvlIdx = levels.indexOf(difficultySelect.value);
         let detailsHtml = '';
 
         if (gameModeActive) {
-          levelScores[lvlIdx] = score; // Store final score for this level in game mode
+          levelScores[lvlIdx] = score; 
 
           for (let i = 0; i <= lvlIdx; i++) {
             detailsHtml += `Lv. ${i + 1} (${levels[i]}): ${levelScores[i]} points<br>`;
           }
 
-          if (lvlIdx === levels.length - 1) { // Master level in game mode completed
+          if (lvlIdx === levels.length - 1) { 
             const overallScore = levelScores.reduce((sum, s) => sum + s, 0);
             detailsHtml += `Overall: ${overallScore} points`;
-            closeModalBtn.textContent = 'Try Master Again';
-          } else { // Easy or Advanced in game mode completed
+            closeModalBtn.textContent = `Try ${levels[lvlIdx]} Again`; 
+          } else { 
             closeModalBtn.textContent = 'Advance Level';
           }
-        } else { // Free Play Mode
+        } else { 
           detailsHtml = `Level ${levels[lvlIdx]} Complete!<br>Score: ${score} points`;
           closeModalBtn.textContent = `Play ${levels[lvlIdx]} Again`;
         }
@@ -370,34 +437,34 @@
       const currentLevelIndex = levels.indexOf(difficultySelect.value);
 
       if (gameModeActive) {
-        if (currentLevelIndex < levels.length - 1) { // Advancing from Easy or Advanced
+        if (currentLevelIndex < levels.length - 1) { 
           levelSummariesDiv.innerHTML += `Lv. ${currentLevelIndex + 1} (${levels[currentLevelIndex]}): ${levelScores[currentLevelIndex]} points<br>`;
-          difficultySelect.value = levels[currentLevelIndex + 1]; // Programmatic change, does not fire 'change' event
-          resetLevel(); // Resets current attempt score for the new level
-        } else { // Finished Master in Game Mode (button says "Try Master Again")
+          difficultySelect.value = levels[currentLevelIndex + 1]; 
+          resetLevel(); 
+        } else { 
+          let fullSummary = '';
+          for(let i=0; i < levels.length; i++) {
+            fullSummary += `Lv. ${i + 1} (${levels[i]}): ${levelScores[i]} points<br>`;
+          }
           const overall = levelScores.reduce((sum, s) => sum + s, 0);
-          levelSummariesDiv.innerHTML = // Show full game summary
-            `Lv. 1 (Easy): ${levelScores[0]} points<br>` +
-            `Lv. 2 (Advanced): ${levelScores[1]} points<br>` +
-            `Lv. 3 (Master): ${levelScores[2]} points<br>` +
-            `Overall: ${overall} points`;
-          resetLevel(); // Reload Master, resets current attempt score
+          fullSummary += `Overall: ${overall} points`;
+          levelSummariesDiv.innerHTML = fullSummary;
+          resetLevel(); 
         }
-      } else { // Free Play Mode (button says "Play <Level> Again")
+      } else { 
         levelSummariesDiv.textContent = `Free Play Mode: ${levels[currentLevelIndex]} - Last score: ${score}`;
-        resetLevel(); // Reload current level for another free play, resets current attempt score
+        resetLevel(); 
       }
     });
 
     difficultySelect.addEventListener('change', () => {
-      gameModeActive = false; // User manually changed difficulty, enter free play
+      gameModeActive = false; 
       levelSummariesDiv.textContent = 'Free Play Mode';
-      winDetailsDiv.innerHTML = ''; // Clear any old win details
-      resetLevel(); // Reset for the newly selected difficulty (will call new generateMelodies)
+      winDetailsDiv.innerHTML = ''; 
+      resetLevel(); 
     });
 
-    // Initial setup
-    resetAll(); // Start in game mode
+    resetAll();
   </script>
 </body>
 </html>
